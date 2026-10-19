@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper to check valid document IDs
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 64;
+    }
+
+    // Inquiries: public can submit; owner/admin can read/manage
+    match /inquiries/{inquiryId} {
+      allow create: if isValidId(inquiryId)
+                    && request.resource.data.name is string
+                    && request.resource.data.email is string
+                    && request.resource.data.details is string;
+      allow read, update, delete: if request.auth != null;
+    }
+
+    // Creative Concepts: public can submit; owner can read/manage
+    match /creative_concepts/{conceptId} {
+      allow create: if isValidId(conceptId)
+                    && request.resource.data.name is string
+                    && request.resource.data.contact is string
+                    && request.resource.data.title is string
+                    && request.resource.data.description is string;
+      allow read, update, delete: if request.auth != null;
+    }
+
+    // Customer Reviews:
+    // - Public can read only approved reviews
+    // - Clients can create a review with isApproved == false
+    // - Authenticated owner can manage/approve all reviews
+    match /reviews/{reviewId} {
+      allow read: if (resource != null && resource.data.isApproved == true) || request.auth != null;
+      allow create: if isValidId(reviewId)
+                    && request.resource.data.rating is number
+                    && request.resource.data.rating >= 1
+                    && request.resource.data.rating <= 5
+                    && request.resource.data.comment is string
+                    && request.resource.data.isApproved == false;
+      allow update, delete: if request.auth != null;
+    }
+
+    // Studio Projects
+    match /projects/{projectId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

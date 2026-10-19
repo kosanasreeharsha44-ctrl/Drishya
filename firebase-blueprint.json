@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "inquiry": {
+      "title": "Inquiry",
+      "description": "Client contact inquiry for video editing or design",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "service": { "type": "string" },
+        "deadline": { "type": "string" },
+        "details": { "type": "string" },
+        "referenceLink": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "service", "details", "status", "createdAt"]
+    },
+    "creative_concept": {
+      "title": "CreativeConcept",
+      "description": "Creative concept pitch for revenue-share co-creation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "contact": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "consent": { "type": "boolean" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "contact", "title", "description", "consent", "status", "createdAt"]
+    },
+    "review": {
+      "title": "Review",
+      "description": "Client customer review submitted via completed project link",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "projectTitle": { "type": "string" },
+        "clientName": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "service": { "type": "string" },
+        "isApproved": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "projectId", "clientName", "rating", "comment", "isApproved", "createdAt"]
+    },
+    "project": {
+      "title": "Project",
+      "description": "Production video editing and creative project",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientContact": { "type": "string" },
+        "service": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "startDate": { "type": "string" },
+        "deadline": { "type": "string" },
+        "deliveredDate": { "type": "string" },
+        "status": { "type": "string" },
+        "progressPercent": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "clientName", "service", "title", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/inquiries/{inquiryId}": {
+      "schema": "inquiry",
+      "description": "Client inquiries"
+    },
+    "/creative_concepts/{conceptId}": {
+      "schema": "creative_concept",
+      "description": "Submitted creative concepts"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "review",
+      "description": "Customer reviews"
+    },
+    "/projects/{projectId}": {
+      "schema": "project",
+      "description": "Studio client projects"
+    }
+  }
+}

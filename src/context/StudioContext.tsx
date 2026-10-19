@@ -1,4 +1,15 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import {
+  collection,
+  doc,
+  setDoc,
+  onSnapshot,
+  query,
+  where,
+  updateDoc,
+} from 'firebase/firestore';
+import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
+import { db, auth, googleAuthProvider, handleFirestoreError, OperationType } from '../lib/firebase.ts';
 import type {
   FAQItem,
   IdeaSubmission,
@@ -174,6 +185,7 @@ interface StudioContextType {
   // Admin Auth
   isAdminLoggedIn: boolean;
   loginAdmin: (email: string, pass: string, pin?: string) => { success: boolean; error?: string };
+  loginWithGoogle?: () => Promise<{ success: boolean; error?: string }>;
   logoutAdmin: () => void;
   resetAllDataToDefault: () => void;
 
@@ -359,6 +371,80 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const reviewId = params.get('review');
     if (reviewId) {
       setActiveReviewProjectId(reviewId);
+    }
+  }, []);
+
+  // Listen to Firebase Auth state changes
+  useEffect(() => {
+    try {
+      const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+        if (firebaseUser) {
+          const email = firebaseUser.email || '';
+          const isHarsha =
+            email.toLowerCase() === 'unknowneditor910@gmail.com' ||
+            email.toLowerCase() === 'kosanasreeharsha44@gmail.com';
+          setCurrentUser({
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || (isHarsha ? 'Harsha (Owner)' : 'User'),
+            email,
+            role: isHarsha ? 'owner' : 'team',
+          });
+          setIsAdminLoggedIn(true);
+        }
+      });
+      return () => unsubscribe();
+    } catch (err) {
+      console.warn('Firebase Auth state listener error:', err);
+      return undefined;
+    }
+  }, []);
+
+  // Listen for approved customer reviews from Firestore in real time
+  useEffect(() => {
+    try {
+      const reviewsRef = collection(db, 'reviews');
+      const q = query(reviewsRef, where('isApproved', '==', true));
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const firestoreReviews: Review[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            firestoreReviews.push({
+              id: docSnap.id,
+              projectId: data.projectId || '',
+              projectTitle: data.projectTitle || 'Creative Project',
+              clientName: data.clientName || 'Anonymous',
+              rating: Number(data.rating) || 5,
+              comment: data.comment || '',
+              service: data.service || 'video_editing',
+              isApproved: true,
+              createdAt: data.createdAt || new Date().toISOString(),
+            });
+          });
+
+          if (firestoreReviews.length > 0) {
+            setReviews((prev) => {
+              const pendingOnly = prev.filter((r) => !r.isApproved);
+              const combined = [...firestoreReviews, ...pendingOnly];
+              const seen = new Set<string>();
+              return combined.filter((r) => {
+                if (seen.has(r.id)) return false;
+                seen.add(r.id);
+                return true;
+              });
+            });
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'reviews');
+        }
+      );
+
+      return () => unsubscribe();
+    } catch (err) {
+      console.warn('Review listener error:', err);
+      return undefined;
     }
   }, []);
 
@@ -645,6 +731,26 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     setNotifications((prev) => [notif, ...prev]);
 
+    // Persist to Firestore
+    try {
+      setDoc(doc(db, 'inquiries', newInquiry.id), {
+        id: newInquiry.id,
+        name: newInquiry.name,
+        email: newInquiry.email,
+        phone: newInquiry.phone || '',
+        service: newInquiry.service,
+        deadline: newInquiry.deadline || '',
+        details: newInquiry.details,
+        referenceLink: newInquiry.referenceLink || '',
+        status: newInquiry.status,
+        createdAt: newInquiry.createdAt,
+      }).catch((err) => {
+        handleFirestoreError(err, OperationType.CREATE, `inquiries/${newInquiry.id}`);
+      });
+    } catch (err) {
+      console.warn('Inquiry Firestore write error:', err);
+    }
+
     return { success: true, inquiry: newInquiry };
   };
 
@@ -720,6 +826,26 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     emitPushAlert('new_idea', 'New Creative Concept Submitted', `${newIdea.name} submitted concept: "${newIdea.title}".`);
 
+    // Persist to Firestore
+    try {
+      setDoc(doc(db, 'creative_concepts', newIdea.id), {
+        id: newIdea.id,
+        name: newIdea.name,
+        contact: newIdea.contact,
+        title: newIdea.title,
+        description: newIdea.description,
+        category: newIdea.category || 'Creative Concept',
+        fileUrl: newIdea.fileUrl || '',
+        consent: newIdea.consent ?? true,
+        status: newIdea.status,
+        createdAt: newIdea.createdAt,
+      }).catch((err) => {
+        handleFirestoreError(err, OperationType.CREATE, `creative_concepts/${newIdea.id}`);
+      });
+    } catch (err) {
+      console.warn('Creative Concept Firestore write error:', err);
+    }
+
     return { success: true, idea: newIdea };
   };
 
@@ -788,12 +914,44 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     setNotifications((prev) => [notif, ...prev]);
 
+    // Persist to Firestore
+    try {
+      setDoc(doc(db, 'reviews', newReview.id), {
+        id: newReview.id,
+        projectId: newReview.projectId,
+        projectTitle: newReview.projectTitle,
+        clientName: newReview.clientName,
+        rating: newReview.rating,
+        comment: newReview.comment,
+        service: newReview.service,
+        isApproved: false,
+        createdAt: newReview.createdAt,
+      }).catch((err) => {
+        handleFirestoreError(err, OperationType.CREATE, `reviews/${newReview.id}`);
+      });
+    } catch (err) {
+      console.warn('Review Firestore write error:', err);
+    }
+
     return { success: true, review: newReview };
   };
 
   const approveReview = (id: string) => {
     setReviews((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, isApproved: !r.isApproved } : r))
+      prev.map((r) => {
+        if (r.id === id) {
+          const updatedApproval = !r.isApproved;
+          try {
+            updateDoc(doc(db, 'reviews', id), { isApproved: updatedApproval }).catch((err) => {
+              console.warn('Firestore review approval update error:', err);
+            });
+          } catch (err) {
+            console.warn('Firestore updateDoc error:', err);
+          }
+          return { ...r, isApproved: updatedApproval };
+        }
+        return r;
+      })
     );
   };
 
@@ -883,8 +1041,34 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   };
 
+  const loginWithGoogle = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleAuthProvider);
+      const user = result.user;
+      const email = user.email || '';
+      const isHarsha =
+        email.toLowerCase() === 'unknowneditor910@gmail.com' ||
+        email.toLowerCase() === 'kosanasreeharsha44@gmail.com';
+      setCurrentUser({
+        id: user.uid,
+        name: user.displayName || (isHarsha ? 'Harsha (Owner)' : 'User'),
+        email,
+        role: isHarsha ? 'owner' : 'team',
+      });
+      setIsAdminLoggedIn(true);
+      return { success: true };
+    } catch (err) {
+      console.error('Firebase Google sign-in failed:', err);
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Google sign-in failed',
+      };
+    }
+  };
+
   const logoutAdmin = () => {
     setIsAdminLoggedIn(false);
+    auth.signOut().catch(() => {});
   };
 
   const resetAllDataToDefault = () => {
@@ -947,6 +1131,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         clearPushAlerts,
         isAdminLoggedIn,
         loginAdmin,
+        loginWithGoogle,
         logoutAdmin,
         resetAllDataToDefault,
         activeReviewProjectId,
