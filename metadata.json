@@ -1,0 +1,6 @@
+{
+  "name": "Drishya",
+  "description": "Drishya by Harsha offering cinematic video editing, poster and photo design, and collaborative idea revenue-share partnerships.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
